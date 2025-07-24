@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analizador de Sustancias en Imágenes</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <main class="container">
+        <h1>Analizador de Sustancias en Imágenes</h1>
+        <p>Sube la foto de una caja de medicamento o una lista de ingredientes para analizarla.</p>
+
+        <div class="upload-area">
+            <input type="file" id="uploader" accept="image/*">
+            <label for="uploader">Seleccionar Imagen</label>
+        </div>
+
+        <div class="image-preview">
+            <img id="imagePreview" src="" alt="Previsualización de la imagen">
+            <p id="image-placeholder">Aquí se mostrará tu imagen</p>
+        </div>
+
+        <button id="processButton">Analizar Imagen</button>
+        <div id="status"></div>
+    </main>
+
+    <div id="reporte-container" class="reporte-container" style="display: none;">
+        
+        <div class="reporte-seccion">
+            <h2>Sustancias Encontradas</h2>
+            <div id="sustancias-encontradas"></div>
+        </div>
+
+        <div class="reporte-seccion">
+            <h2>Guía de Categorías de Riesgo en el Embarazo (FDA)</h2>
+            <div class="categoria-info">
+                <h3>Categoría A: Sin Riesgo Demostrado</h3>
+                <p>Estudios en personas han demostrado que estos medicamentos son seguros para el feto durante todo el embarazo.</p>
+            </div>
+            <div class="categoria-info">
+                <h3>Categoría B: Sin Evidencia de Riesgo en Humanos</h3>
+                <p>Estudios en animales no muestran riesgo, pero no hay suficientes estudios en personas. Generalmente se consideran seguros.</p>
+            </div>
+            <div class="categoria-info">
+                <h3>Categoría C: Riesgo no Descartado</h3>
+                <p>Estudios en animales han mostrado algún riesgo y no hay estudios adecuados en personas. Solo deben usarse si el beneficio para la madre es mayor que el posible riesgo para el bebé.</p>
+            </div>
+            <div class="categoria-info">
+                <h3>Categoría D: Evidencia de Riesgo</h3>
+                <p>Existen pruebas de riesgo para el feto, pero en situaciones graves, los beneficios de usar el medicamento en la madre podrían superar los riesgos. Su uso requiere una evaluación médica muy cuidadosa.</p>
+            </div>
+            <div class="categoria-info">
+                <h3>Categoría X: Contraindicado</h3>
+                <p>Estudios han demostrado que el medicamento causa anomalías en el feto. El riesgo de usarlo supera claramente cualquier posible beneficio. No debe usarse nunca durante el embarazo.</p>
+            </div>
+        </div>
+        
+        <div class="reporte-seccion">
+            <h2>Texto Completo Extraído de la Imagen</h2>
+            <pre id="result"></pre>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

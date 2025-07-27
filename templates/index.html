@@ -9,8 +9,8 @@
 <body>
 
     <main class="container">
-        <h1>Analizador de Sustancias en Imágenes</h1>
-        <p>Sube la foto de una caja de medicamento o una lista de ingredientes para analizarla.</p>
+        <h1>Analizador de Recetas Médicas</h1>
+        <p>Sube una foto de una receta o lista de ingredientes para analizar sus componentes.</p>
 
         <div class="upload-area">
             <input type="file" id="uploader" accept="image/*">
@@ -23,38 +23,42 @@
         </div>
 
         <button id="processButton">Analizar Imagen</button>
-        <div id="status"></div>
+        <div id="status" role="alert" aria-live="polite"></div>
     </main>
 
     <div id="reporte-container" class="reporte-container" style="display: none;">
         
         <div class="reporte-seccion">
-            <h2>Sustancias Encontradas</h2>
+            <h2>Resumen de Riesgos (Asistente IA)</h2>
+            <div id="resumen-llm" class="resumen-ia"></div>
+            <p class="disclaimer">
+                <strong>Importante:</strong> Este resumen es generado por una inteligencia artificial como una guía informativa. 
+                No reemplaza en ningún caso la consulta, el diagnóstico o la recomendación de un profesional de la salud. 
+                <strong>Consulta siempre a tu médico.</strong>
+            </p>
+        </div>
+
+        <div class="reporte-seccion">
+            <h2>Sustancias Analizadas (Encontradas en Base de Datos)</h2>
             <div id="sustancias-encontradas"></div>
+        </div>
+
+        <div class="reporte-seccion" id="seccion-desconocidas" style="display: none;">
+            <h2>Sustancias Detectadas (Sin Información de Riesgo)</h2>
+            <div id="sustancias-desconocidas" class="desconocidas-container"></div>
+            <p class="disclaimer-warning">
+                <strong>Atención:</strong> Para estas sustancias no tenemos información específica de riesgo en nuestra base de datos.
+                Es <strong>esencial</strong> que consultes a tu médico sobre su seguridad durante el embarazo.
+            </p>
         </div>
 
         <div class="reporte-seccion">
             <h2>Guía de Categorías de Riesgo en el Embarazo (FDA)</h2>
-            <div class="categoria-info">
-                <h3>Categoría A: Sin Riesgo Demostrado</h3>
-                <p>Estudios en personas han demostrado que estos medicamentos son seguros para el feto durante todo el embarazo.</p>
-            </div>
-            <div class="categoria-info">
-                <h3>Categoría B: Sin Evidencia de Riesgo en Humanos</h3>
-                <p>Estudios en animales no muestran riesgo, pero no hay suficientes estudios en personas. Generalmente se consideran seguros.</p>
-            </div>
-            <div class="categoria-info">
-                <h3>Categoría C: Riesgo no Descartado</h3>
-                <p>Estudios en animales han mostrado algún riesgo y no hay estudios adecuados en personas. Solo deben usarse si el beneficio para la madre es mayor que el posible riesgo para el bebé.</p>
-            </div>
-            <div class="categoria-info">
-                <h3>Categoría D: Evidencia de Riesgo</h3>
-                <p>Existen pruebas de riesgo para el feto, pero en situaciones graves, los beneficios de usar el medicamento en la madre podrían superar los riesgos. Su uso requiere una evaluación médica muy cuidadosa.</p>
-            </div>
-            <div class="categoria-info">
-                <h3>Categoría X: Contraindicado</h3>
-                <p>Estudios han demostrado que el medicamento causa anomalías en el feto. El riesgo de usarlo supera claramente cualquier posible beneficio. No debe usarse nunca durante el embarazo.</p>
-            </div>
+            <div class="categoria-info"><h3>Categoría A: Sin Riesgo Demostrado</h3><p>Estudios controlados en mujeres embarazadas no han demostrado un riesgo para el feto.</p></div>
+            <div class="categoria-info"><h3>Categoría B: Sin Evidencia de Riesgo en Humanos</h3><p>Estudios en animales no han mostrado riesgo, pero no hay estudios adecuados en humanos. Generalmente considerados seguros.</p></div>
+            <div class="categoria-info"><h3>Categoría C: Riesgo no Descartado</h3><p>Estudios en animales muestran riesgo y no hay estudios en humanos. Usar solo si el beneficio justifica el riesgo potencial.</p></div>
+            <div class="categoria-info"><h3>Categoría D: Evidencia de Riesgo</h3><p>Hay evidencia positiva de riesgo fetal humano. Puede usarse si los beneficios para la madre superan los riesgos.</p></div>
+            <div class="categoria-info"><h3>Categoría X: Contraindicado</h3><p>Las anomalías fetales demostradas superan claramente cualquier posible beneficio. No usar nunca durante el embarazo.</p></div>
         </div>
         
         <div class="reporte-seccion">

@@ -28,6 +28,8 @@ body {
 h1 {
     color: #1e3a8a;
     margin-bottom: 10px;
+    font-size: 2.2rem; /* Tamaño base para escritorio */
+    line-height: 1.2;
 }
 
 p {
@@ -111,6 +113,7 @@ button#processButton:disabled { background-color: #999; cursor: not-allowed; }
     border-bottom: 2px solid #e0e0e0;
     padding-bottom: 10px;
     margin-bottom: 20px;
+    font-size: 1.5rem; /* Tamaño base para escritorio */
 }
 
 .resumen-ia {
@@ -122,14 +125,15 @@ button#processButton:disabled { background-color: #999; cursor: not-allowed; }
     line-height: 1.6;
 }
 
-.disclaimer {
+.disclaimer, .disclaimer-warning {
     font-size: 0.85em;
-    color: #d32f2f;
-    background-color: #ffebee;
     padding: 10px;
     border-radius: 5px;
-    border: 1px solid #d32f2f;
+    border: 1px solid;
 }
+
+.disclaimer { color: #d32f2f; background-color: #ffebee; border-color: #d32f2f; }
+.disclaimer-warning { color: #b45309; background-color: #fffbe6; border-color: #fcd34d; margin-top: 15px; }
 
 .sustancia-card {
     border-left-width: 5px;
@@ -179,12 +183,27 @@ button#processButton:disabled { background-color: #999; cursor: not-allowed; }
     font-size: 0.9em;
 }
 
-.disclaimer-warning {
-    font-size: 0.85em;
-    color: #b45309;
-    background-color: #fffbe6;
-    padding: 10px;
-    border-radius: 5px;
-    border: 1px solid #fcd34d;
-    margin-top: 15px;
+/* --- Media Queries para Responsividad --- */
+/* Se aplicará a pantallas de 600px de ancho o menos */
+@media screen and (max-width: 600px) {
+    body {
+        padding: 10px; /* Menos espacio en los bordes de la página */
+    }
+
+    .container, .reporte-container {
+        padding: 15px; /* Menos relleno interno en los contenedores */
+    }
+
+    h1 {
+        font-size: 1.8rem; /* Título principal más pequeño */
+    }
+
+    .reporte-seccion h2 {
+        font-size: 1.3rem; /* Títulos de sección más pequeños */
+    }
+
+    button#processButton, label[for="uploader"] {
+        padding: 12px 18px; /* Botones ligeramente más compactos */
+        font-size: 14px;
+    }
 }

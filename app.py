@@ -10,8 +10,13 @@ import re
 import os
 import google.generativeai as genai
 
-# --- CONFIGURACIÓN DE TESSERACT (IMPORTANTE: ajusta esta ruta a tu instalación) ---
-pytesseract.pytesseract.tesseract_cmd = r'D:\tesseract\tesseract.exe'
+# --- CONFIGURACIÓN DE TESSERACT 
+tesseract_path = os.getenv("TESSERACT_CMD")
+if tesseract_path:
+    print(f"Usando ruta de Tesseract desde la variable de entorno: {tesseract_path}")
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    print("Variable de entorno TESSERACT_CMD no encontrada. Se usará la ruta por defecto del sistema.")
 
 # --- CONFIGURACIÓN DE LA API DE GOOGLE GEMINI ---
 try:

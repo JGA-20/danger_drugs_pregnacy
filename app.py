@@ -1,4 +1,4 @@
-# app.py
+# app.py (Versión de Alto Rendimiento / Todo-en-Uno)
 
 from flask import Flask, request, jsonify, render_template
 import pytesseract
@@ -9,8 +9,9 @@ import traceback
 import re
 import os
 import google.generativeai as genai
+import json
 
-# --- CONFIGURACIÓN DE TESSERACT 
+# --- CONFIGURACIÓN DE TESSERACT PORTÁTIL ---
 tesseract_path = os.getenv("TESSERACT_CMD")
 if tesseract_path:
     print(f"Usando ruta de Tesseract desde la variable de entorno: {tesseract_path}")
@@ -35,6 +36,8 @@ except Exception as e:
 # --- Carga y preparación de datos ---
 try:
     df_sustancias = pd.read_csv('sustancias.csv', encoding='latin-1')
+    # Limpiamos el NaN de la descripción desde el principio
+    df_sustancias['Declaración de seguridad'] = df_sustancias['Declaración de seguridad'].fillna("No hay una declaración de seguridad disponible.")
     df_sustancias['nombre_lower'] = df_sustancias['Nombre'].str.lower()
     if 'NombreNormalizado' in df_sustancias.columns:
         df_sustancias['normalizado_lower'] = df_sustancias['NombreNormalizado'].str.lower().fillna('')
@@ -49,60 +52,62 @@ except Exception as e:
 # --- Inicialización de Flask ---
 app = Flask(__name__)
 
-# --- Funciones de IA ---
-
-def extraer_medicamentos_con_ia(texto_receta):
+# --- NUEVA FUNCIÓN DE IA "TODO EN UNO" ---
+def analizar_receta_con_ia(texto_receta, df_sustancias_conocidas):
     if not gemini_model:
-        return []
+        return {'error': 'El modelo de IA no está configurado.'}
 
-    prompt = (
-        "Analiza el siguiente texto. Tu única tarea es extraer los nombres de los medicamentos o sustancias activas. "
-        "Devuelve únicamente una lista de estos nombres, separados por comas. "
-        "Ignora dosis, instrucciones, nombres de doctores o cualquier otra palabra. "
-        "Si no encuentras ningún medicamento, devuelve una respuesta vacía.\n\n"
-        "Texto a analizar:\n"
-        f"--- INICIO ---\n{texto_receta}\n--- FIN ---"
-    )
+    lista_sustancias_str = ", ".join(df_sustancias_conocidas['nombre_lower'].unique())
+
+    prompt = f"""
+    Eres un asistente farmacéutico experto. Realiza las siguientes tareas en orden:
+    1.  Analiza el siguiente texto de una receta o lista de ingredientes:
+        --- TEXTO A ANALIZAR ---
+        {texto_receta}
+        --- FIN DEL TEXTO ---
+
+    2.  De ese texto, extrae todos los nombres de medicamentos o sustancias que puedas identificar.
+
+    3.  Compara los nombres que extrajiste con la siguiente lista de sustancias de riesgo conocido que te proporciono:
+        --- LISTA DE SUSTANCIAS CONOCIDAS ---
+        {lista_sustancias_str}
+        --- FIN DE LA LISTA ---
+
+    4.  Para cada sustancia que encontraste TANTO en el texto de la receta COMO en la lista de sustancias conocidas, busca su información correspondiente en los datos que te doy más abajo y agrégala a una lista.
+
+    5.  Crea un resumen en lenguaje sencillo sobre los riesgos de las sustancias encontradas. Si no encuentras ninguna sustancia de riesgo, di que no se encontraron sustancias de riesgo conocido en la base de datos.
+
+    6.  Devuelve tu respuesta ÚNICAMENTE como un objeto JSON válido, sin texto adicional antes o después. El JSON debe tener la siguiente estructura exacta:
+        {{
+          "sustancias_analizadas": [{{ "nombre": "Nombre Completo de la Sustancia del CSV", "categoria": "Categoría del CSV", "descripcion": "Descripción del CSV" }}],
+          "sustancias_desconocidas": ["Nombre de sustancia encontrada en la receta pero no en la lista del CSV"],
+          "resumen_llm": "Tu resumen en lenguaje sencillo aquí."
+        }}
+
+    Aquí están los datos completos de las sustancias conocidas para que los uses en el paso 4. Usa el nombre exacto de la columna 'Nombre' para el resultado:
+    --- DATOS COMPLETOS CSV ---
+    {df_sustancias_conocidas.to_json(orient='records')}
+    --- FIN DE DATOS CSV ---
+    """
 
     try:
-        print("Enviando prompt a Gemini para EXTRACCIÓN de medicamentos...")
-        response = gemini_model.generate_content(prompt)
-        medicamentos_extraidos = response.text.strip()
-        print(f"Medicamentos extraídos por la IA: '{medicamentos_extraidos}'")
+        print("Enviando una ÚNICA llamada a la IA para análisis completo...")
+        # Aumentamos el timeout por si la tarea es compleja
+        request_options = {"timeout": 120}
+        response = gemini_model.generate_content(prompt, request_options=request_options)
         
-        if medicamentos_extraidos:
-            lista_medicamentos = [med.strip() for med in medicamentos_extraidos.split(',') if med.strip()]
-            return lista_medicamentos
-        return []
+        cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
+        print("Respuesta recibida y limpiada. Intentando decodificar JSON...")
+        
+        resultado_json = json.loads(cleaned_response)
+        return resultado_json
+
+    except json.JSONDecodeError:
+        print(f"ERROR FATAL: La respuesta de la IA no es un JSON válido. Respuesta recibida:\n{response.text}")
+        return {'sustancias_analizadas': [], 'sustancias_desconocidas': [], 'resumen_llm': 'Error: El asistente de IA no respondió con el formato esperado. Por favor, intenta de nuevo.'}
     except Exception as e:
-        print(f"ERROR al extraer medicamentos con la IA: {e}")
-        return []
-
-def generar_resumen_ia(sustancias):
-    if not gemini_model or not sustancias:
-        return "No se encontraron sustancias conocidas para generar un resumen."
-
-    prompt_parts = [
-        "Actúa como un asistente farmacéutico empático y muy claro. Te daré una lista de sustancias encontradas en un producto y su categoría de riesgo en el embarazo (A, B, C, D, X).",
-        "Tu misión es explicar en un lenguaje extremadamente sencillo, directo y sin tecnicismos qué significan estos riesgos para una mujer embarazada o que planea estarlo.",
-        "Resume el nivel de precaución necesario. Al final, SIEMPRE debes incluir la recomendación enfática de consultar a un médico antes de tomar cualquier decisión.",
-        "\nAquí están las sustancias:\n"
-    ]
-
-    for sustancia in sustancias:
-        prompt_parts.append(f"- **{sustancia['nombre']} (Categoría {sustancia['categoria']}):** {sustancia['descripcion']}")
-
-    prompt_parts.append("\nGenera un resumen consolidado y fácil de entender basado en esta información.")
-    prompt = "\n".join(prompt_parts)
-
-    try:
-        print("Enviando prompt a Gemini para RESUMEN de riesgos...")
-        response = gemini_model.generate_content(prompt)
-        print("Resumen de riesgos recibido de Gemini.")
-        return response.text
-    except Exception as e:
-        print(f"ERROR al llamar a la API de Gemini para resumen: {e}")
-        return "Hubo un error al generar el resumen de riesgos."
+        print(f"ERROR al llamar a la API de IA: {e}")
+        return {'error': f'Error al comunicarse con el asistente de IA: {e}'}
 
 # --- Rutas de la aplicación ---
 @app.route('/')
@@ -111,58 +116,29 @@ def home():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No se encontró ningún archivo'}), 400
+    if 'file' not in request.files: return jsonify({'error': 'No se encontró ningún archivo'}), 400
     file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
+    if file.filename == '': return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
 
     if file and not df_sustancias.empty:
         try:
             image_bytes = file.read()
             image = Image.open(io.BytesIO(image_bytes))
             
-            print("Iniciando extracción de texto con Tesseract...")
+            print("\n--- NUEVO ANÁLISIS (MODO ALTO RENDIMIENTO) ---")
             texto_extraido = pytesseract.image_to_string(image, lang='spa')
-            print(f"Texto completo extraído: '{texto_extraido[:200]}...'")
 
-            lista_medicamentos_ia = extraer_medicamentos_con_ia(texto_extraido)
+            # Llamamos a la nueva función "todo en uno"
+            resultado_ia = analizar_receta_con_ia(texto_extraido, df_sustancias)
 
-            sustancias_analizadas = []
-            sustancias_desconocidas = []
-            nombres_ya_agregados = set()
+            if 'error' in resultado_ia:
+                return jsonify({'error': resultado_ia['error']}), 500
 
-            print("Clasificando medicamentos extraídos por la IA...")
-            for medicamento_nombre in lista_medicamentos_ia:
-                medicamento_lower = medicamento_nombre.lower()
-                encontrado = False
-                
-                for _, row in df_sustancias.iterrows():
-                    nombres_a_buscar = {str(row['nombre_lower'])}
-                    if 'normalizado_lower' in row and pd.notna(row['normalizado_lower']) and row['normalizado_lower']:
-                        nombres_a_buscar.add(str(row['normalizado_lower']))
-                    
-                    if medicamento_lower in nombres_a_buscar:
-                        if row['Nombre'] not in nombres_ya_agregados:
-                            print(f"✔️ Sustancia CONOCIDA encontrada: {row['Nombre']}")
-                            info_sustancia = { 'nombre': row['Nombre'], 'categoria': row['Categoría'], 'descripcion': row['Declaración de seguridad'] }
-                            sustancias_analizadas.append(info_sustancia)
-                            nombres_ya_agregados.add(row['Nombre'])
-                            encontrado = True
-                            break
-                
-                if not encontrado and medicamento_nombre not in nombres_ya_agregados:
-                    print(f"⚠️ Sustancia DESCONOCIDA detectada: {medicamento_nombre}")
-                    sustancias_desconocidas.append(medicamento_nombre)
-                    nombres_ya_agregados.add(medicamento_nombre)
-
-            resumen_llm = generar_resumen_ia(sustancias_analizadas)
-            
             return jsonify({
                 'texto_completo': texto_extraido,
-                'sustancias_analizadas': sustancias_analizadas,
-                'sustancias_desconocidas': sustancias_desconocidas,
-                'resumen_llm': resumen_llm
+                'sustancias_analizadas': resultado_ia.get('sustancias_analizadas', []),
+                'sustancias_desconocidas': resultado_ia.get('sustancias_desconocidas', []),
+                'resumen_llm': resultado_ia.get('resumen_llm', '')
             })
 
         except Exception as e:

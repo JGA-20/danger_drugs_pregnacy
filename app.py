@@ -1,29 +1,25 @@
-# app.py (Versión de Alto Rendimiento / Todo-en-Uno)
+# app.py (Versión de Reinicio - Con Resumen Amigable)
 
+# --- 1. Imports ---
 from flask import Flask, request, jsonify, render_template
 import pytesseract
 from PIL import Image
 import io
 import pandas as pd
 import traceback
-import re
 import os
 import google.generativeai as genai
 import json
 
-# --- CONFIGURACIÓN DE TESSERACT PORTÁTIL ---
+# --- 2. Configuraciones ---
 tesseract_path = os.getenv("TESSERACT_CMD")
 if tesseract_path:
-    print(f"Usando ruta de Tesseract desde la variable de entorno: {tesseract_path}")
     pytesseract.pytesseract.tesseract_cmd = tesseract_path
-else:
-    print("Variable de entorno TESSERACT_CMD no encontrada. Se usará la ruta por defecto del sistema.")
 
-# --- CONFIGURACIÓN DE LA API DE GOOGLE GEMINI ---
 try:
     api_key = os.getenv("GOOGLE_API_KEY")
     if not api_key:
-        print("ADVERTENCIA: La variable de entorno GOOGLE_API_KEY no está configurada. Las funciones de IA no funcionarán.")
+        print("ADVERTENCIA: GOOGLE_API_KEY no encontrada. La IA no funcionará.")
         gemini_model = None
     else:
         genai.configure(api_key=api_key)
@@ -33,119 +29,122 @@ except Exception as e:
     print(f"ERROR al configurar la API de Gemini: {e}")
     gemini_model = None
 
-# --- Carga y preparación de datos ---
 try:
     df_sustancias = pd.read_csv('sustancias.csv', encoding='latin-1')
-    # Limpiamos el NaN de la descripción desde el principio
-    df_sustancias['Declaración de seguridad'] = df_sustancias['Declaración de seguridad'].fillna("No hay una declaración de seguridad disponible.")
+    df_sustancias.fillna('', inplace=True)
     df_sustancias['nombre_lower'] = df_sustancias['Nombre'].str.lower()
     if 'NombreNormalizado' in df_sustancias.columns:
-        df_sustancias['normalizado_lower'] = df_sustancias['NombreNormalizado'].str.lower().fillna('')
-    print("El archivo sustancias.csv se cargó correctamente.")
-except FileNotFoundError:
-    print("ADVERTENCIA: El archivo 'sustancias.csv' no fue encontrado. La búsqueda de sustancias no funcionará.")
-    df_sustancias = pd.DataFrame()
+        df_sustancias['normalizado_lower'] = df_sustancias['NombreNormalizado'].str.lower()
+    print("El archivo sustancias.csv se cargó y limpió correctamente.")
 except Exception as e:
     print(f"ERROR al leer el archivo CSV: {e}")
     df_sustancias = pd.DataFrame()
 
-# --- Inicialización de Flask ---
 app = Flask(__name__)
 
-# --- NUEVA FUNCIÓN DE IA "TODO EN UNO" ---
-def analizar_receta_con_ia(texto_receta, df_sustancias_conocidas):
-    if not gemini_model:
-        return {'error': 'El modelo de IA no está configurado.'}
+# --- 3. Funciones de Ayuda ---
 
-    lista_sustancias_str = ", ".join(df_sustancias_conocidas['nombre_lower'].unique())
-
-    prompt = f"""
-    Eres un asistente farmacéutico experto. Realiza las siguientes tareas en orden:
-    1.  Analiza el siguiente texto de una receta o lista de ingredientes:
-        --- TEXTO A ANALIZAR ---
-        {texto_receta}
-        --- FIN DEL TEXTO ---
-
-    2.  De ese texto, extrae todos los nombres de medicamentos o sustancias que puedas identificar.
-
-    3.  Compara los nombres que extrajiste con la siguiente lista de sustancias de riesgo conocido que te proporciono:
-        --- LISTA DE SUSTANCIAS CONOCIDAS ---
-        {lista_sustancias_str}
-        --- FIN DE LA LISTA ---
-
-    4.  Para cada sustancia que encontraste TANTO en el texto de la receta COMO en la lista de sustancias conocidas, busca su información correspondiente en los datos que te doy más abajo y agrégala a una lista.
-
-    5.  Crea un resumen en lenguaje sencillo sobre los riesgos de las sustancias encontradas. Si no encuentras ninguna sustancia de riesgo, di que no se encontraron sustancias de riesgo conocido en la base de datos.
-
-    6.  Devuelve tu respuesta ÚNICAMENTE como un objeto JSON válido, sin texto adicional antes o después. El JSON debe tener la siguiente estructura exacta:
-        {{
-          "sustancias_analizadas": [{{ "nombre": "Nombre Completo de la Sustancia del CSV", "categoria": "Categoría del CSV", "descripcion": "Descripción del CSV" }}],
-          "sustancias_desconocidas": ["Nombre de sustancia encontrada en la receta pero no en la lista del CSV"],
-          "resumen_llm": "Tu resumen en lenguaje sencillo aquí."
-        }}
-
-    Aquí están los datos completos de las sustancias conocidas para que los uses en el paso 4. Usa el nombre exacto de la columna 'Nombre' para el resultado:
-    --- DATOS COMPLETOS CSV ---
-    {df_sustancias_conocidas.to_json(orient='records')}
-    --- FIN DE DATOS CSV ---
-    """
-
+def extraer_medicamentos_con_ia(texto_receta):
+    """(1ª LLAMADA A LA API) Extrae nombres de medicamentos del texto OCR."""
+    if not gemini_model: return []
+    prompt = "Analiza el siguiente texto. Extrae SOLAMENTE los nombres de los medicamentos o sustancias. Devuelve una lista separada por comas. Ejemplo: Ibuprofeno, Paracetamol, Aspirina.\n\nTexto: " + texto_receta
     try:
-        print("Enviando una ÚNICA llamada a la IA para análisis completo...")
-        # Aumentamos el timeout por si la tarea es compleja
-        request_options = {"timeout": 120}
-        response = gemini_model.generate_content(prompt, request_options=request_options)
-        
-        cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
-        print("Respuesta recibida y limpiada. Intentando decodificar JSON...")
-        
-        resultado_json = json.loads(cleaned_response)
-        return resultado_json
-
-    except json.JSONDecodeError:
-        print(f"ERROR FATAL: La respuesta de la IA no es un JSON válido. Respuesta recibida:\n{response.text}")
-        return {'sustancias_analizadas': [], 'sustancias_desconocidas': [], 'resumen_llm': 'Error: El asistente de IA no respondió con el formato esperado. Por favor, intenta de nuevo.'}
+        print("Enviando 1ª llamada a la IA para EXTRACCIÓN...")
+        response = gemini_model.generate_content(prompt)
+        medicamentos_extraidos = response.text.strip()
+        print(f"Medicamentos extraídos por la IA: '{medicamentos_extraidos}'")
+        return [med.strip() for med in medicamentos_extraidos.split(',') if med.strip()]
     except Exception as e:
-        print(f"ERROR al llamar a la API de IA: {e}")
-        return {'error': f'Error al comunicarse con el asistente de IA: {e}'}
+        print(f"ERROR en la extracción con IA: {e}")
+        return []
 
-# --- Rutas de la aplicación ---
+def generar_resumen_ia(sustancias_analizadas):
+    """(2ª LLAMADA A LA API) Genera un resumen de los riesgos en tono amigable."""
+    if not gemini_model or not sustancias_analizadas:
+        return "No encontramos información de riesgo sobre las sustancias detectadas en nuestra base de datos."
+
+    prompt_parts = [
+        "Actúa como una amiga experta en farmacia que habla con otra amiga que está embarazada. Tu tono debe ser cercano, tranquilizador y muy fácil de entender si pecar de muy amigable.",
+        "Olvídate de los tecnicismos. Explica en lenguaje coloquial qué significan los riesgos de estas sustancias. Usa analogías si es necesario, como 'piénsalo como una luz de semáforo'.",
+        "Al final, cierra la conversación con una recomendación cálida pero firme de que hable con su doctor, algo como 'recuerda que yo soy solo una ayuda, la última palabra siempre la tiene tu médico de confianza'.",
+        "\nAquí te paso lo que encontré:\n"
+    ]
+
+    for sustancia in sustancias_analizadas:
+        prompt_parts.append(f"- {sustancia['nombre']} (Categoría {sustancia['categoria']}): {sustancia['descripcion']}")
+    
+    try:
+        print("Enviando 2ª llamada a la IA para RESUMEN (tono amigable)...")
+        response = gemini_model.generate_content("\n".join(prompt_parts))
+        print("Resumen amigable recibido.")
+        return response.text
+    except Exception as e:
+        print(f"ERROR en el resumen con IA: {e}")
+        return "Tuvimos un problema al generar el resumen."
+
+# --- 4. Rutas de la Aplicación ---
+
 @app.route('/')
 def home():
+    """Sirve la página principal."""
     return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    """El orquestador principal: OCR -> IA Extracción -> Python Clasificación -> IA Resumen."""
     if 'file' not in request.files: return jsonify({'error': 'No se encontró ningún archivo'}), 400
     file = request.files['file']
-    if file.filename == '': return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
+    if not file.filename: return jsonify({'error': 'No se seleccionó ningún archivo'}), 400
 
-    if file and not df_sustancias.empty:
-        try:
-            image_bytes = file.read()
-            image = Image.open(io.BytesIO(image_bytes))
+    if df_sustancias.empty:
+        return jsonify({'error': 'La base de datos de sustancias no está cargada en el servidor.'}), 500
+
+    try:
+        print("\n--- INICIANDO NUEVO ANÁLISIS ---")
+        image_bytes = file.read()
+        texto_extraido = pytesseract.image_to_string(Image.open(io.BytesIO(image_bytes)), lang='spa')
+        
+        lista_medicamentos_ia = extraer_medicamentos_con_ia(texto_extraido)
+        if not lista_medicamentos_ia:
+             return jsonify({'texto_completo': texto_extraido, 'sustancias_analizadas': [], 'sustancias_desconocidas': [], 'resumen_llm': 'El asistente de IA no pudo extraer nombres de medicamentos del texto.'})
+
+        print("Clasificando medicamentos en Python...")
+        sustancias_analizadas = []
+        sustancias_desconocidas = []
+        medicamentos_ia_ya_procesados = set()
+
+        for medicamento_ia in lista_medicamentos_ia:
+            if medicamento_ia in medicamentos_ia_ya_procesados: continue
             
-            print("\n--- NUEVO ANÁLISIS (MODO ALTO RENDIMIENTO) ---")
-            texto_extraido = pytesseract.image_to_string(image, lang='spa')
-
-            # Llamamos a la nueva función "todo en uno"
-            resultado_ia = analizar_receta_con_ia(texto_extraido, df_sustancias)
-
-            if 'error' in resultado_ia:
-                return jsonify({'error': resultado_ia['error']}), 500
-
-            return jsonify({
-                'texto_completo': texto_extraido,
-                'sustancias_analizadas': resultado_ia.get('sustancias_analizadas', []),
-                'sustancias_desconocidas': resultado_ia.get('sustancias_desconocidas', []),
-                'resumen_llm': resultado_ia.get('resumen_llm', '')
-            })
-
-        except Exception as e:
-            print(f"ERROR DURANTE EL PROCESAMIENTO: {traceback.format_exc()}")
-            return jsonify({'error': f'Error interno del servidor: {str(e)}'}), 500
+            encontrado = False
+            for _, row in df_sustancias.iterrows():
+                if medicamento_ia.lower() in row['nombre_lower']:
+                    info_sustancia = { 'nombre': row['Nombre'], 'categoria': row['Categoría'], 'descripcion': row['Declaración de seguridad'] }
+                    sustancias_analizadas.append(info_sustancia)
+                    encontrado = True
+                    for med_ia_sub in lista_medicamentos_ia:
+                        if med_ia_sub.lower() in row['nombre_lower']:
+                             medicamentos_ia_ya_procesados.add(med_ia_sub)
+                    break
             
-    return jsonify({'error': 'No se pudo procesar el archivo o la base de datos no está cargada.'}), 500
+            if not encontrado:
+                sustancias_desconocidas.append(medicamento_ia)
+            
+            medicamentos_ia_ya_procesados.add(medicamento_ia)
 
+        resumen_llm = generar_resumen_ia(sustancias_analizadas)
+
+        return jsonify({
+            'texto_completo': texto_extraido,
+            'sustancias_analizadas': sustancias_analizadas,
+            'sustancias_desconocidas': sustancias_desconocidas,
+            'resumen_llm': resumen_llm
+        })
+
+    except Exception:
+        print(f"ERROR INESPERADO EN LA RUTA /upload: {traceback.format_exc()}")
+        return jsonify({'error': 'Ocurrió un error interno grave en el servidor.'}), 500
+
+# --- 5. Punto de Entrada ---
 if __name__ == '__main__':
     app.run(debug=True)

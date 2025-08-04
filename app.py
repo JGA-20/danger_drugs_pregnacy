@@ -1,6 +1,3 @@
-# app.py (Versión de Reinicio - Con Resumen Amigable)
-
-# --- 1. Imports ---
 from flask import Flask, request, jsonify, render_template
 import pytesseract
 from PIL import Image
@@ -45,7 +42,7 @@ app = Flask(__name__)
 # --- 3. Funciones de Ayuda ---
 
 def extraer_medicamentos_con_ia(texto_receta):
-    """(1ª LLAMADA A LA API) Extrae nombres de medicamentos del texto OCR."""
+    """Extrae nombres de medicamentos del texto OCR."""
     if not gemini_model: return []
     prompt = "Analiza el siguiente texto. Extrae SOLAMENTE los nombres de los medicamentos o sustancias. Devuelve una lista separada por comas. Ejemplo: Ibuprofeno, Paracetamol, Aspirina.\n\nTexto: " + texto_receta
     try:
@@ -59,12 +56,12 @@ def extraer_medicamentos_con_ia(texto_receta):
         return []
 
 def generar_resumen_ia(sustancias_analizadas):
-    """(2ª LLAMADA A LA API) Genera un resumen de los riesgos en tono amigable."""
+    """Genera un resumen de los riesgos en tono amigable."""
     if not gemini_model or not sustancias_analizadas:
         return "No encontramos información de riesgo sobre las sustancias detectadas en nuestra base de datos."
 
     prompt_parts = [
-        "Actúa como una amiga experta en farmacia que habla con otra amiga que está embarazada. Tu tono debe ser cercano, tranquilizador y muy fácil de entender si pecar de muy amigable.",
+        "Actúa como una experta en farmacia que habla con otra amiga que está embarazada. Tu tono debe ser cercano, tranquilizador y muy fácil de entender si pecar de muy amigable.",
         "Olvídate de los tecnicismos. Explica en lenguaje coloquial qué significan los riesgos de estas sustancias. Usa analogías si es necesario, como 'piénsalo como una luz de semáforo'.",
         "Al final, cierra la conversación con una recomendación cálida pero firme de que hable con su doctor, algo como 'recuerda que yo soy solo una ayuda, la última palabra siempre la tiene tu médico de confianza'.",
         "\nAquí te paso lo que encontré:\n"

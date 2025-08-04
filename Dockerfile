@@ -1,5 +1,5 @@
 # Paso 1: Usar una imagen base oficial de Python
-FROM python:3.10-slim
+FROM python:3.12-slim
 
 # Paso 2: Instalar las dependencias del sistema operativo, incluyendo Tesseract y el paquete de idioma español
 # El "-y" responde "sí" automáticamente a cualquier pregunta
@@ -23,3 +23,4 @@ COPY . .
 # Render necesita que la app escuche en 0.0.0.0 en un puerto específico
 EXPOSE 10000
 CMD ["gunicorn", "app:app", "--bind", "0.0.0.0:10000"]
+
